@@ -1,0 +1,89 @@
+// --- User Variables ---
+thickness = 3.175;       // 1/8 inch
+length = 25.4 * 4;       // 4 inch total length
+width_per_side = 25.4 * 1.5; // 1.5 inches per face
+hole_spacing = 25.4 * 3; // 3 inches center-to-center
+hole_diameter = 5.5;     // M5 bolt clearance
+$fn = 60;
+
+// Extension Variables
+tab_reach = 25.4 * 4.5; // 4.5 inches out from the center line
+tab_width = 25.4 * 1.25; // 1.25 inch wide tab for stability
+secondary_wall_offset = 25.4 * 2.4; // The 2.4 inch slide-back
+
+// The Target Height (2/8 inch above the top of the horizontal floor)
+target_center_height = 6.35; 
+
+// Positioning Math
+edge_offset = (length - hole_spacing) / 2;
+center_line_y = width_per_side / 2;
+
+module rounded_pill_slot() {
+    slot_travel = 10;
+    z_start = thickness + target_center_height;
+    z_end = z_start + slot_travel;
+
+    hull() {
+        translate([0, thickness/2, z_start]) 
+            rotate([90, 0, 0]) 
+                cylinder(h = thickness + 2, d = hole_diameter, center=true);
+        translate([0, thickness/2, z_end])  
+            rotate([90, 0, 0]) 
+                cylinder(h = thickness + 2, d = hole_diameter, center=true);
+    }
+}
+
+// Created a module for the vertical wall to keep the code clean since we use it twice
+module vertical_slotted_wall() {
+    difference() {
+        cube([length, thickness, width_per_side]); // Vertical Wall
+        
+        // Rounded Slots (on the Wall)
+        translate([edge_offset, 0, 0])
+            rounded_pill_slot();
+        translate([edge_offset + hole_spacing, 0, 0])
+            rounded_pill_slot();
+    }
+}
+
+module final_shuttle_assembly() {
+    difference() {
+        union() {
+            // 1. The Main L-Bracket Floor
+            hull() {
+                translate([0, 0, 0]) cube([length, 1, thickness]);
+                translate([0, width_per_side-1, 0]) cube([length, 1, thickness]);
+            }
+            
+            // 2. The Original Vertical Wall
+            vertical_slotted_wall();
+
+            // 3. The Secondary Vertical Wall (Slid back 2.4 inches)
+            // We translate it in the negative Y direction
+            translate([0, -secondary_wall_offset, 0])
+                vertical_slotted_wall();
+
+            // 4. The Extension Tab
+            translate([length/2, center_line_y, 0])
+            hull() {
+                cylinder(h = thickness, d = tab_width);
+                translate([0, -tab_reach, 0]) 
+                    cylinder(h = thickness, d = tab_width);
+            }
+        }
+
+        // --- THE CUTOUTS (Floor Only) ---
+        
+        // 1. Fixed Holes (on the Floor)
+        translate([edge_offset, center_line_y, -1])
+            cylinder(h = thickness + 2, d = hole_diameter);
+        translate([edge_offset + hole_spacing, center_line_y, -1])
+            cylinder(h = thickness + 2, d = hole_diameter);
+            
+        // 2. The Extension Hole (At the 180° opposite end)
+        translate([length/2, center_line_y - tab_reach, -1])
+            cylinder(h = thickness + 2, d = hole_diameter);
+    }
+}
+
+final_shuttle_assembly();
