@@ -1,2 +1,74 @@
 #depriciated https://www.thingiverse.com/thing:2371117
-https://www.thingiverse.com/thing:3169670
+#better: https://www.thingiverse.com/thing:3169670
+
+
+
+#here is the scale up script: 
+
+import bpy
+
+# ==================== CONFIGURATION ====================
+BUN_THICKNESS = 5.0  # The thickness of both the top and bottom buns (in mm)
+SCALE_FACTOR = 2.0   # Adjust this to change how thick the patty gets (e.g., 1.5, 2.0, etc.)
+# =======================================================
+
+# Get the currently active object
+obj = bpy.context.active_object
+
+if obj and obj.type == 'MESH':
+    # Force Object Mode to safely edit vertex coordinates
+    if bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    
+    # Apply all scale transforms first to ensure measurements match 1 unit = 1 mm
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    
+    mesh = obj.data
+    
+    # Step 1: Find the absolute bounds of the mesh
+    all_z_coords = [vert.co.z for vert in mesh.vertices]
+    lowest_z = min(all_z_coords)
+    highest_z = max(all_z_coords)
+    total_height = highest_z - lowest_z
+    
+    # Step 2: Define Patty boundaries dynamically based on the 5mm buns
+    Z_MIN = lowest_z + BUN_THICKNESS    # Bottom of patty
+    Z_MAX = highest_z - BUN_THICKNESS   # Top of patty
+    
+    # Quick sanity check
+    if Z_MAX <= Z_MIN:
+        print("Error: The model height is too small for these bun measurements!")
+    else:
+        # Step 3: Calculate the scale and shift offsets
+        original_patty_height = Z_MAX - Z_MIN
+        new_patty_height = original_patty_height * SCALE_FACTOR
+        shift_offset = new_patty_height - original_patty_height
+        
+        # Step 4: Loop through and transform the vertices
+        for vert in mesh.vertices:
+            z = vert.co.z
+            
+            if z < Z_MIN:
+                # Inside Bottom Bun: Leave completely alone
+                continue
+                
+            elif Z_MIN <= z <= Z_MAX:
+                # Inside Patty: Scale it relative to the bottom bun seam
+                relative_z = z - Z_MIN
+                vert.co.z = Z_MIN + (relative_z * SCALE_FACTOR)
+                
+            else:
+                # Inside Top Bun: Shift up to stay flush with the expanding patty
+                vert.co.z = z + shift_offset
+                
+        # Tell Blender to update the viewport and redraw the mesh
+        mesh.update()
+        
+        print("\n--- SUCCESS ---")
+        print(f"Total original height detected: {total_height:.2f} mm")
+        print(f"Bottom bun region: {lowest_z:.2f} mm to {Z_MIN:.2f} mm")
+        print(f"Patty region: {Z_MIN:.2f} mm to {Z_MAX:.2f} mm (Scaled by {SCALE_FACTOR}x)")
+        print(f"Top bun region: {Z_MAX:.2f} mm to {highest_z:.2f} mm (Shifted up by {shift_offset:.2f} mm)")
+        print("----------------\n")
+else:
+    print("Error: Please select your 3D model in the viewport first.")
