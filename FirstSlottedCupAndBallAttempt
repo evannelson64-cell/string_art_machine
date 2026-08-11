@@ -1,0 +1,71 @@
+// --- GLOBAL CONSTANTS ---
+radius = 8;          // 50% of original
+wall = 2;            // 50% of original 4mm
+y_nudge = 7.715;     // unchanged
+shelf_thick = 2;     // 50% of original 4mm shelf thickness
+notch_width = 8.255; // 0.325 inches (0.300 + 0.025)
+$fn = 80;
+
+// --- ADJUSTABLE SHELF DIMENSIONS ---
+shelf_length_x = 29; // Length extending away from cup in -X
+shelf_height_z = 42; // Extended from 35 to 42mm to accommodate the 13mm gap + slot + bottom margin
+
+// Fixed attachment point: anchors the inner edge near the cup
+inner_x_edge = -(radius + wall) + 25.4/2; 
+
+// --- BOLT SLOT PARAMETERS (M3) ---
+slot_width = 3.4;         // M3 shank clearance (screw head won't pass through)
+slot_length = 12;         // Vertical height of each slot ("stripe")
+slot_spacing = 15.5;      // Center-to-center spacing between slots
+
+slot1_x = -5;             // Slot 1: set to -5mm
+slot2_x = slot1_x - slot_spacing; // Slot 2: 15.5mm to the left (-20.5mm)
+
+// Calculates -23mm (13mm solid material below cup bottom at Z = -10)
+cup_bottom_z = -(radius + wall); 
+solid_gap_under_cup = 13;
+slot_top_z = cup_bottom_z - solid_gap_under_cup; 
+
+// Near face of shelf
+near_face = y_nudge - shelf_thick/2; // = 5.715mm
+
+// Helper module: creates vertical slot cutter along Z, cutting through Y
+module slot(x_pos, z_top, length, width) {
+    hull() {
+        translate([x_pos, y_nudge, z_top - width/2])
+            rotate([90, 0, 0]) cylinder(r=width/2, h=50, center=true);
+        translate([x_pos, y_nudge, z_top - length + width/2])
+            rotate([90, 0, 0]) cylinder(r=width/2, h=50, center=true);
+    }
+}
+
+// 1. THE BALL (Orange, scaled to 50%)
+//translate([50, 0, 0]) color("Orange") sphere(r=radius);
+
+// 2. THE ASSEMBLY
+color("DeepSkyBlue")
+difference() {
+    union() {
+        // THE OUTER SHELL (The Igloo)
+        difference() {
+            sphere(r = radius + wall);
+            // Chop top off at Z=0
+            translate([0, 0, 50]) cube([100, 100, 100], center=true);
+        }
+        
+        // THE SHELF (Teapot Handle)
+        translate([inner_x_edge - shelf_length_x/2, y_nudge, -shelf_height_z/2])
+            cube([shelf_length_x, shelf_thick, shelf_height_z], center=true);
+    }
+    
+    // THE HOLLOW CENTER
+    sphere(r = radius);
+    
+    // THE NOTCH - near face flush with shelf's near face, extends in -Y
+    translate([-(radius + wall)/2, near_face - notch_width/2, -(radius + wall)/2])
+        cube([radius + wall, notch_width, radius + wall], center=true);
+
+    // M3 BOLT SLOTS
+    slot(slot1_x, slot_top_z, slot_length, slot_width);
+    slot(slot2_x, slot_top_z, slot_length, slot_width);
+}
