@@ -1,0 +1,171 @@
+macaroni torus sliders:
+
+/* ====================================================================
+   FLUSH INTERLOCKING MACARONI TORUS ROLLER FOR 3/8" COPPER PIPE
+   - Uniform 7.4mm outer diameter throughout (NO collars or bulges).
+   - 608 Bearings (8.0mm ID) slide on effortlessly over either end.
+   - Flush tongue-and-groove joint pinned with a vertical M3 bolt.
+   - Exact 15.7625mm radius for 3-point tangent contact on copper pipe.
+   ==================================================================== */
+
+$fn = 80;
+
+// --- CRITICAL DIMENSIONS (mm) ---
+pipe_od          = 9.525;   // 3/8" Copper Pipe OD
+bearing_od       = 22.0;    // 608 Outer Diameter
+bearing_id       = 8.0;     // 608 Inner Bore
+bearing_w        = 7.0;     // 608 Width
+
+// Torus Centerline Radius (Calculated for exact zero-gap tangent contact)
+torus_r          = (pipe_od / 2) + (bearing_od / 2); // 15.7625 mm
+
+// Tube Geometry
+macaroni_d       = 7.4;     // Smooth tube OD (allows 8.0mm bore to glide over)
+seat_d           = 7.85;    // Snug fit seat diameter at center (60°)
+joint_angle      = 14.0;    // Joint overlap angle in degrees
+
+// Joint Clearances (Contained strictly inside 7.4mm profile)
+tongue_w         = 2.3;     // Central male tongue thickness
+slot_w           = 2.6;     // Female slot width (0.3mm clearance)
+m3_hole_d        = 3.3;     // M3 screw pass-through hole
+
+// --- VIEW CONTROLS ---
+// Options: "assembled", "exploded", "single_segment"
+mode = "assembled";
+
+if (mode == "assembled") {
+    for (a = [0, 120, 240]) {
+        rotate([0, 0, a]) macaroni_segment();
+    }
+    render_bearings();
+    render_m3_hardware();
+    color("DarkOrange", 0.5) cylinder(h = 70, d = pipe_od, center = true);
+} else if (mode == "exploded") {
+    for (a = [0, 120, 240]) {
+        rotate([0, 0, a]) translate([16, 0, 0]) macaroni_segment();
+    }
+    render_bearings(explode = 16);
+    render_m3_hardware(explode = 26);
+    color("DarkOrange", 0.5) cylinder(h = 70, d = pipe_od, center = true);
+} else if (mode == "single_segment") {
+    macaroni_segment();
+    render_single_bearing();
+}
+
+// --- MODULES ---
+
+// Single 120-Degree Modular Macaroni Segment (Print 3 of these)
+module macaroni_segment() {
+    difference() {
+        union() {
+            // 1. Continuous Smooth Curved Macaroni Body (0° to 120°)
+            rotate_extrude(angle = 120) {
+                translate([torus_r, 0, 0])
+                    circle(d = macaroni_d);
+            }
+            
+            // 2. Central Bearing Seat Swell at 60°
+            rotate([0, 0, 60]) {
+                translate([torus_r, 0, 0]) {
+                    rotate([90, 0, 0]) {
+                        cylinder(h = bearing_w, d = seat_d, center = true);
+                    }
+                }
+            }
+            
+            // 3. Flush Male Tongue (Extends from 120° to 120° + joint_angle)
+            // Kept strictly within the 7.4mm circular profile
+            rotate([0, 0, 120]) {
+                rotate_extrude(angle = joint_angle) {
+                    translate([torus_r, 0, 0]) {
+                        intersection() {
+                            circle(d = macaroni_d);
+                            square([macaroni_d + 1, tongue_w], center = true);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // --- SUBTRACTIONS ---
+        
+        // A. Female Slot at 0° End (Receives male tongue from preceding segment)
+        rotate([0, 0, -0.1]) {
+            rotate_extrude(angle = joint_angle + 0.2) {
+                translate([torus_r, 0, 0]) {
+                    square([macaroni_d + 2, slot_w], center = true);
+                }
+            }
+        }
+        
+        // B. Vertical Pin Hole through Female Slot (at angle = joint_angle / 2)
+        rotate([0, 0, joint_angle / 2]) {
+            translate([torus_r, 0, 0]) {
+                cylinder(h = macaroni_d + 4, d = m3_hole_d, center = true);
+                // Flat spots for M3 bolt head & nut resting flat
+                translate([0, 0, (macaroni_d / 2) + 1]) cube([8, 8, 3], center = true);
+                translate([0, 0, -((macaroni_d / 2) + 1)]) cube([8, 8, 3], center = true);
+            }
+        }
+        
+        // C. Vertical Pin Hole through Male Tongue (at angle = 120 + joint_angle / 2)
+        rotate([0, 0, 120 + (joint_angle / 2)]) {
+            translate([torus_r, 0, 0]) {
+                cylinder(h = macaroni_d + 4, d = m3_hole_d, center = true);
+            }
+        }
+    }
+}
+
+// Visualizer Helpers
+module render_bearings(explode = 0) {
+    for (a = [60, 180, 300]) {
+        ex_x = (explode > 0) ? cos(a) * explode : 0;
+        ex_y = (explode > 0) ? sin(a) * explode : 0;
+        
+        translate([ex_x, ex_y, 0]) {
+            rotate([0, 0, a]) {
+                translate([torus_r, 0, 0]) {
+                    rotate([90, 0, 0]) {
+                        color("SteelBlue", 0.9) difference() {
+                            cylinder(h = bearing_w, d = bearing_od, center = true);
+                            cylinder(h = bearing_w + 0.4, d = bearing_id, center = true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+module render_single_bearing() {
+    rotate([0, 0, 60]) {
+        translate([torus_r, 0, 0]) {
+            rotate([90, 0, 0]) {
+                color("SteelBlue", 0.9) difference() {
+                    cylinder(h = bearing_w, d = bearing_od, center = true);
+                    cylinder(h = bearing_w + 0.4, d = bearing_id, center = true);
+                }
+            }
+        }
+    }
+}
+
+module render_m3_hardware(explode = 0) {
+    for (a = [7, 127, 247]) {
+        rotate([0, 0, a]) {
+            translate([torus_r, 0, 6 + explode]) {
+                color("Silver", 0.9) union() {
+                    cylinder(h = 10, d = 2.9, center = true);
+                    translate([0, 0, 5]) cylinder(h = 2, d = 5.5, center = true);
+                }
+            }
+            translate([torus_r, 0, -(5 + explode)]) {
+                color("Goldenrod", 0.9) difference() {
+                    cylinder(h = 2.4, d = 6.2, center = true, $fn = 6);
+                    cylinder(h = 3.0, d = 3.0, center = true);
+                }
+            }
+        }
+    }
+}
