@@ -1,0 +1,36 @@
+// --- GLOBAL CONSTANTS ---
+radius = 8;          // 50% of original
+wall = 2;            // 50% of original 4mm
+shelf_size = 25.4;   // 1 inch (unchanged)
+y_nudge = 7.715;     // unchanged
+shelf_thick = 2;     // 50% of original 4mm shelf thickness
+notch_width = 8.255; // 0.325 inches (0.300 + 0.025)
+$fn = 80;
+
+// Near face of shelf
+near_face = y_nudge - shelf_thick/2; // = 5.715mm
+
+// 1. THE BALL (Orange, scaled to 50%)
+translate([50, 0, 0]) color("Orange") sphere(r=radius);
+
+// 2. THE ASSEMBLY
+color("DeepSkyBlue")
+difference() {
+    union() {
+        // THE OUTER SHELL (The Igloo)
+        difference() {
+            sphere(r = radius + wall);
+            // Chop top off at Z=0
+            translate([0, 0, 50]) cube([100, 100, 100], center=true);
+        }
+        // THE SHELF (Teapot Handle)
+        translate([-(radius + wall), y_nudge, -shelf_size/2])
+            rotate([0, 0, 90])
+                cube([shelf_thick, shelf_size, shelf_size], center=true);
+    }
+    // THE HOLLOW CENTER
+    sphere(r = radius);
+    // THE NOTCH - near face flush with shelf's near face, extends in -Y
+    translate([-(radius + wall)/2, near_face - notch_width/2, -(radius + wall)/2])
+        cube([radius + wall, notch_width, radius + wall], center=true);
+}
