@@ -1,0 +1,102 @@
+/* ====================================================================
+   DOUBLE-MACARONI SEGMENT (240-DEGREE CONTINUOUS ARC)
+   - Merges 2 macaroni pieces into 1 solid contiguous body.
+   - No joint or bolt hole in the middle (120° mark).
+   - Includes 2 bearing seats (at 60° and 180°).
+   - Female slot at 0° end, Male tongue at 240° end.
+   - Smooth 7.4mm OD allows 608 bearings to slide on from both ends.
+   ==================================================================== */
+
+$fn = 80;
+
+// --- CRITICAL DIMENSIONS (mm) ---
+pipe_od          = 9.525;   // 3/8" Copper Pipe OD
+bearing_od       = 22.0;    // 608 Outer Diameter
+bearing_w        = 7.0;     // 608 Width
+
+// Torus Centerline Radius (3-point tangent contact)
+torus_r          = (pipe_od / 2) + (bearing_od / 2); // 15.7625 mm
+
+// Tube Geometry
+macaroni_d       = 7.4;     // Outer diameter (allows 8.0mm bore to glide over)
+seat_d           = 7.85;    // Snug center seat diameter
+joint_angle      = 14.0;    // Joint overlap angle in degrees
+
+// Joint Clearances
+tongue_w         = 2.3;     // Central male tongue thickness
+slot_w           = 2.6;     // Female slot width (0.3mm clearance)
+m3_hole_d        = 3.3;     // M3 screw pass-through hole
+
+// --- RENDER DOUBLE SEGMENT ---
+double_macaroni_segment();
+
+// --- MODULE DEFINITION ---
+module double_macaroni_segment() {
+    difference() {
+        union() {
+            // 1. Continuous Smooth Curved Macaroni Body (0° to 240°)
+            rotate_extrude(angle = 240) {
+                translate([torus_r, 0, 0])
+                    circle(d = macaroni_d);
+            }
+            
+            // 2. First Bearing Seat at 60°
+            rotate([0, 0, 60]) {
+                translate([torus_r, 0, 0]) {
+                    rotate([90, 0, 0]) {
+                        cylinder(h = bearing_w, d = seat_d, center = true);
+                    }
+                }
+            }
+            
+            // 3. Second Bearing Seat at 180°
+            rotate([0, 0, 180]) {
+                translate([torus_r, 0, 0]) {
+                    rotate([90, 0, 0]) {
+                        cylinder(h = bearing_w, d = seat_d, center = true);
+                    }
+                }
+            }
+            
+            // 4. Flush Male Tongue at 240° End (Extends from 240° to 254°)
+            rotate([0, 0, 240]) {
+                rotate_extrude(angle = joint_angle) {
+                    translate([torus_r, 0, 0]) {
+                        intersection() {
+                            circle(d = macaroni_d);
+                            square([macaroni_d + 1, tongue_w], center = true);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // --- SUBTRACTIONS ---
+        
+        // A. Female Slot at 0° End
+        rotate([0, 0, -0.1]) {
+            rotate_extrude(angle = joint_angle + 0.2) {
+                translate([torus_r, 0, 0]) {
+                    square([macaroni_d + 2, slot_w], center = true);
+                }
+            }
+        }
+        
+        // B. Vertical Pin Hole through Female Slot (at angle = 7°)
+        rotate([0, 0, joint_angle / 2]) {
+            translate([torus_r, 0, 0]) {
+                cylinder(h = macaroni_d + 4, d = m3_hole_d, center = true);
+                // Flat spots for M3 bolt head & nut resting flat
+                translate([0, 0, (macaroni_d / 2) + 1]) cube([8, 8, 3], center = true);
+                translate([0, 0, -((macaroni_d / 2) + 1)]) cube([8, 8, 3], center = true);
+            }
+        }
+        
+        // C. Vertical Pin Hole through Male Tongue (at angle = 247°)
+        rotate([0, 0, 240 + (joint_angle / 2)]) {
+            translate([torus_r, 0, 0]) {
+                cylinder(h = macaroni_d + 4, d = m3_hole_d, center = true);
+            }
+        }
+    }
+}
