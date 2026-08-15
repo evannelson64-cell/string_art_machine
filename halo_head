@@ -1,0 +1,351 @@
+// ============================================================
+//   UNIFIED DREMEL PLUNGE ASSEMBLY - MASTER (CAP-ENCAPSULATED)
+//   Features: Encapsulating Halo Top Sockets with Negative Space Cutouts,
+//             Angle-Matched Incline, Front-Swept Asymmetric Beefy Support Arms,
+//             Parameterized Gear Window, Radial Outer Base Attachment.
+// ============================================================
+
+include <BOSL2/std.scad>
+include <BOSL2/gears.scad>
+
+/* [Export & Visibility Controls] */
+Show_Pancake        = true;
+Show_Cradle         = true;
+Show_Motor_Mount    = true;
+Show_Slider         = true;
+Show_Rack           = true;
+Show_Pinion         = true;
+Show_Motor_Dummy    = true;  // Toggle for NEMA 17 spatial dummy
+Show_Halo           = true;  // Toggle for Visualization Halo Ring
+Show_Support_Arms   = true;  // Toggle for Halo Angled Support Arms
+
+/* [Halo Support Arm Params] */
+Arm_Angle_1         = 90;    // Cutting boundary angle for first support post (degrees)
+Arm_Angle_2         = 270;   // Cutting boundary angle for second support post (degrees)
+Arm_Arc_Angle       = 28;    // Arc span for beefier supports (degrees)
+Arm_Thickness       = 14;    // Cross-sectional thickness of main support body (mm)
+Arm_Base_Radius     = 66;    // Radial position of support base anchor on pancake (mm, pancake outer radius is ~73.15mm)
+Halo_Cap_Width      = 22;    // Expanded radial width at top to cradle outer halo radius (mm)
+Halo_Cap_Height     = 15;    // Expanded height at top to encapsulate halo tube (mm)
+Halo_Clearance      = 0.2;   // Extra clearance for printed fit around the 9mm halo ring (mm)
+Gusset_Arc_Extra    = 12;    // Extra angular flare at base on motor side (degrees)
+Gusset_Height       = 22;    // Height (mm) of base gusset flare
+
+/* [Slider & Cradle Params] */
+Slider_Belly_Width    = 30;
+Slider_Stem_Width     = 15;
+Top_Plate_Width       = 55;
+Belly_Plate_Thickness = 8;
+Outer_Wall_Thickness  = 8;
+Floor_Height          = 8;
+Tab_Thickness         = 6;
+
+/* [Mechanical & Gear Controls] */
+Side_Clearance      = 0.5;
+Vertical_Clearance  = 0.5;
+Length              = 100;
+Slide_Travel        = 0;
+num_teeth_pinion    = 24;
+module_size         = 1.3;
+gear_thick          = 10;
+slot_len_val        = 6;      // Length of adjustment travel
+motor_offset_target = 24;     // Distance from pinion center to motor face
+pilot_diam          = 24;     // NEMA 17 pilot diameter
+rim_diam            = 28;     // Clearance for motor boss rim
+bolt_head_clearance = 5.35;   // Clearance for M3 bolt heads/washers
+Gear_Window_Length  = 38;     // Length of the gear cutout window
+Gear_Window_Width   = 49;     // Width of the gear cutout window
+
+/* [Hidden] */
+$fn = 64;
+bit_offset_mm   = 0.375 * 25.4; 
+pancake_thickness = 3.08;
+pancake_diameter  = 146.3;
+pancake_hole_r    = 22;
+pillar_radius     = 117.35 / 2 - 11.55 / 2;
+pillar_bolt_d     = 2.3;
+pillar_bolt_depth = 9.24;
+tunnel_h          = Belly_Plate_Thickness + (Vertical_Clearance * 2);
+top_plate_y       = Floor_Height + tunnel_h + Tab_Thickness + Vertical_Clearance;
+total_h_cradle    = Floor_Height + tunnel_h + Tab_Thickness;
+local_bit_tip_y   = top_plate_y + 6 + bit_offset_mm;
+pinion_y_center   = Floor_Height - (pilot_diam / 2) - (slot_len_val / 2);
+bridge_anchor_x   = ((Slider_Belly_Width + (Side_Clearance*2) + (Outer_Wall_Thickness*2)) / 2) - 6;
+
+/* [Halo / Ring Geometry Math] */
+halo_tube_d        = 9;                                // 9mm tube thickness (~pinky fingernail width)
+halo_tube_r        = halo_tube_d / 2;                  // 4.5mm radius cross-section
+motor_body_sz      = 42.3;                             // NEMA 17 width/height
+motor_body_len     = 40.0;                             // NEMA 17 body length
+motor_mount_x      = (gear_thick/2) + motor_offset_target;
+motor_far_x        = motor_mount_x + 2.54 + (5.08 / 2) + motor_body_len; 
+motor_active_y     = pinion_y_center + (slot_len_val / 2);
+motor_min_y        = motor_active_y - (motor_body_sz / 2);                
+
+motor_corner_dist  = sqrt(pow(motor_far_x, 2) + pow(motor_min_y - local_bit_tip_y, 2));
+halo_major_r       = motor_corner_dist + halo_tube_r + 3; // ~105.5mm
+halo_z_midpoint    = (pancake_thickness / 2) + (Length / 2);  // ~51.54mm
+
+/* Angle of inclination along the R-Z plane dynamically based on Arm_Base_Radius */
+arm_incline_deg    = atan2(halo_z_midpoint + (pancake_thickness / 2), halo_major_r - Arm_Base_Radius);
+gusset_r           = Arm_Base_Radius + (Gusset_Height / tan(arm_incline_deg));
+
+// ============================================================
+//  GEOMETRY MODULES
+// ============================================================
+
+// Positive Halo Ring module for visualization
+module halo_ring() {
+    color("Gold", 0.6)
+    translate([0, 0, halo_z_midpoint])
+        rotate_extrude($fn=120)
+            translate([halo_major_r, 0, 0])
+                circle(r=halo_tube_r, $fn=32);
+}
+
+// Negative Halo Torus module for cutting curved sockets
+module halo_negative_space(clearance = 0.0) {
+    translate([0, 0, halo_z_midpoint])
+        rotate_extrude($fn=120)
+            translate([halo_major_r, 0, 0])
+                circle(d=halo_tube_d + clearance, $fn=64);
+}
+
+// Asymmetric beefed support arm with outer radial base attachment & halo socket negative space
+module halo_support_arm(deg_angle, sweep_dir) {
+    // sweep_dir: -1 for 90° (sweeps down to 90-Arc), +1 for 270° (sweeps up to 270+Arc)
+    start_angle      = (sweep_dir < 0) ? (deg_angle - Arm_Arc_Angle) : deg_angle;
+    motor_edge_angle = (sweep_dir < 0) ? start_angle : (deg_angle + Arm_Arc_Angle);
+
+    color("DarkSlateGray") {
+        difference() {
+            union() {
+                // 1. MAIN CONCENTRIC CURVED ARM WITH ENCAPSULATING TOP HEAD
+                rotate([0, 0, start_angle]) {
+                    rotate_extrude(angle = Arm_Arc_Angle, $fn=120) {
+                        hull() {
+                            // Base anchor offset radially towards pancake outer edge
+                            translate([Arm_Base_Radius, (-pancake_thickness / 2) + 3])
+                                square([Arm_Thickness, 6], center=true);
+
+                            // Expanded top profile fully surrounding the halo outer radius
+                            translate([halo_major_r, halo_z_midpoint])
+                                rotate([0, 0, -arm_incline_deg])
+                                    square([Halo_Cap_Width, Halo_Cap_Height], center=true);
+                        }
+                    }
+                }
+
+                // 2. FRONT-FACING BASE GUSSET (FLARING TOWARDS MOTOR SIDE ONLY)
+                gusset_base_angle = motor_edge_angle + (sweep_dir * Gusset_Arc_Extra);
+                gusset_start_arc  = min(motor_edge_angle, gusset_base_angle);
+
+                hull() {
+                    // Base contact pad extending towards motor direction
+                    rotate([0, 0, gusset_start_arc])
+                    rotate_extrude(angle = Gusset_Arc_Extra, $fn=120) {
+                        translate([Arm_Base_Radius, (-pancake_thickness / 2) + 2])
+                            square([Arm_Thickness, 4], center=true);
+                    }
+
+                    // Taper point joining back onto main arm along its incline
+                    rotate([0, 0, motor_edge_angle - (sweep_dir * 0.5)])
+                    rotate_extrude(angle = 1, $fn=120) {
+                        translate([gusset_r, Gusset_Height])
+                            square([Arm_Thickness, 3], center=true);
+                    }
+                }
+            }
+
+            // SUBTRACT HALO RING AS NEGATIVE SPACE (WITH 3D PRINT CLEARANCE)
+            halo_negative_space(clearance = Halo_Clearance);
+        }
+    }
+}
+
+module rbox(w, h, d, r=1.5) {
+    rr = min(r, w/2-0.01, h/2-0.01, d/2-0.01);
+    hull() {
+        for (x=[-1,1], y=[-1,1], z=[-1,1])
+            translate([x*(w/2-rr), y*(h/2-rr), z*(d/2-rr)])
+                sphere(r=rr, $fn=16);
+    }
+}
+
+// NEMA 17 Motor Bounding Box Dummy
+module nema17_dummy() {
+    body_size   = 42.3;  
+    body_length = 40.0;  
+    boss_diam   = 22.0;  
+    boss_h      = 2.0;   
+    shaft_diam  = 5.0;   
+    shaft_len   = 24.0;  
+
+    mount_x_pos = (gear_thick/2) + motor_offset_target;
+    face_x = mount_x_pos + 2.54 + (5.08 / 2); 
+    active_y = pinion_y_center + (slot_len_val / 2);
+
+    color("Red", 0.45) {
+        translate([face_x, active_y, 0]) {
+            translate([body_length / 2, 0, 0])
+                cube([body_length, body_size, body_size], center=true);
+
+            rotate([0, -90, 0])
+                cylinder(h=boss_h, d=boss_diam, center=false);
+
+            rotate([0, -90, 0])
+                cylinder(h=shaft_len, d=shaft_diam, center=false);
+        }
+    }
+}
+
+module motor_mount_geometry() {
+    mount_size = 48;
+    hole_dist  = 31;
+    strut_w    = 8;
+    mount_x_pos = (gear_thick/2) + motor_offset_target;
+    arm_len    = mount_x_pos - bridge_anchor_x;
+
+    translate([mount_x_pos + 2.54, pinion_y_center, 0])
+    rotate([0, 90, 0])
+    difference() {
+        hull() {
+            for (x=[-1,1], y=[-1,1])
+                translate([x*20, y*20, 0]) cylinder(r=4, h=5.08, center=true);
+        }
+        hull() {
+            translate([0,  slot_len_val/2, 0]) cylinder(h=10, d=pilot_diam, center=true);
+            translate([0, -slot_len_val/2, 0]) cylinder(h=10, d=pilot_diam, center=true);
+        }
+        for (z_side=[-1,1], y_side=[-1,1]) {
+            translate([z_side * hole_dist/2, y_side * hole_dist/2, 0])
+            hull() {
+                translate([0,  slot_len_val/2, 0]) cylinder(h=10, d=3.4, center=true);
+                translate([0, -slot_len_val/2, 0]) cylinder(h=10, d=3.4, center=true);
+            }
+        }
+    }
+
+    difference() {
+        union() {
+            for (z_side=[-1,1])
+                translate([bridge_anchor_x + (arm_len/2), pinion_y_center, z_side * (mount_size/2 - strut_w/2)])
+                    cube([arm_len, mount_size/3, strut_w], center=true);
+            for (y_side=[-1,1])
+                translate([bridge_anchor_x + (arm_len/2), pinion_y_center + (y_side * (mount_size/2 - strut_w/2)), 0])
+                    cube([arm_len, strut_w, mount_size/3], center=true);
+        }
+        for (z_side=[-1,1], y_side=[-1,1]) {
+            translate([bridge_anchor_x + arm_len/2, pinion_y_center + (y_side * hole_dist/2), z_side * hole_dist/2])
+            rotate([0, 90, 0]) hull() {
+                translate([0,  slot_len_val/2, 0]) cylinder(h=arm_len+5, d=bolt_head_clearance, center=true);
+                translate([0, -slot_len_val/2, 0]) cylinder(h=arm_len+5, d=bolt_head_clearance, center=true);
+            }
+        }
+    }
+}
+
+// Solid pancake base plate
+module pancake_with_pillars_solid() {
+    t = pancake_thickness;
+    difference() {
+        cylinder(h = t, d = pancake_diameter, center = true, $fn = 120);
+        cylinder(h = t + 1, r = pancake_hole_r, center = true, $fn = 120);
+    }
+}
+
+module restored_cradle_flat_bottom() {
+    total_w = Slider_Belly_Width + (Side_Clearance*2) + (Outer_Wall_Thickness*2);
+    R = 1.5; hole_dist = 31; support_thick = 8;
+    
+    union() {
+        difference() {
+            union() {
+                translate([0, (total_h_cradle - R)/2, 0]) cube([total_w, total_h_cradle - R, Length], center=true);
+                translate([0, total_h_cradle - R, 0]) intersection() {
+                    translate([0, -(total_h_cradle - R), 0]) rbox(total_w, total_h_cradle * 2, Length, r=R);
+                    translate([0, R/2, 0]) cube([total_w, R, Length], center=true);
+                }
+            }
+            translate([0, Floor_Height + (tunnel_h/2), 0]) cube([Slider_Belly_Width + (Side_Clearance*2), tunnel_h, Length+2], center=true);
+            translate([0, total_h_cradle - (Tab_Thickness/2), 0]) cube([Slider_Stem_Width + (Side_Clearance*2), Tab_Thickness+2, Length+2], center=true);
+            
+            // Reintegrated Gear Window parameters (Length & Width)
+            translate([0, Floor_Height/2, 0]) cube([Gear_Window_Width, Floor_Height+10, Gear_Window_Length], center=true);
+        }
+
+        if (Show_Motor_Mount) {
+            translate([bridge_anchor_x + (support_thick/2), pinion_y_center, 0])
+            difference() {
+                rbox(support_thick, 48, 48);
+                rotate([0, 90, 0]) {
+                    hull() {
+                        translate([0,  slot_len_val/2, 0]) cylinder(h=support_thick+2, d=pilot_diam, center=true);
+                        translate([0, -slot_len_val/2, 0]) cylinder(h=support_thick+2, d=pilot_diam, center=true);
+                    }
+                    for (z_side=[-1,1], y_side=[-1,1]) {
+                        translate([z_side * hole_dist/2, y_side * hole_dist/2, 0])
+                        hull() {
+                            translate([0,  slot_len_val/2, 0]) cylinder(h=support_thick+2, d=bolt_head_clearance, center=true);
+                            translate([0, -slot_len_val/2, 0]) cylinder(h=support_thick+2, d=bolt_head_clearance, center=true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+module restored_slider() {
+    slider_bottom_y = Floor_Height + Vertical_Clearance;
+    stem_start   = slider_bottom_y + Belly_Plate_Thickness - 0.05;
+    stem_h_calc = top_plate_y - stem_start + 0.05;
+    difference() {
+        union() {
+            translate([0, slider_bottom_y + (Belly_Plate_Thickness/2), 0]) cube([Slider_Belly_Width, Belly_Plate_Thickness, Length], center=true);
+            translate([0, stem_start + (stem_h_calc/2), 0]) cube([Slider_Stem_Width, stem_h_calc, Length], center=true);
+            translate([0, top_plate_y + 3, 0]) union() {
+                cube([Top_Plate_Width, 6, Length], center=true);
+                intersection() {
+                    rbox(Top_Plate_Width, 6, Length);
+                    translate([0, 3 - 1.5, 0]) cube([Top_Plate_Width + 2, 3, Length + 2], center=true);
+                }
+            }
+        }
+        translate([0, Floor_Height + 3.0, 0]) cube([gear_thick + 1.1, 6, Length+2], center=true);
+    }
+}
+
+// ============================================================
+//  FINAL ASSEMBLY
+// ============================================================
+
+if (Show_Halo) halo_ring();
+
+if (Show_Support_Arms) {
+    halo_support_arm(Arm_Angle_1, -1); // 90° arm: sweeps down towards 0°
+    halo_support_arm(Arm_Angle_2,  1); // 270° arm: sweeps up towards 360°/0°
+}
+
+if (Show_Pancake) pancake_with_pillars_solid();
+
+// Apply 90-degree CCW rotation and bit-tip alignment
+rotate([0, 0, 315]) rotate([0, 0, 90]) 
+translate([0, -local_bit_tip_y, (pancake_thickness/2) + (Length/2)]) {
+    
+    if (Show_Cradle) restored_cradle_flat_bottom();
+    if (Show_Motor_Mount) motor_mount_geometry();
+    if (Show_Motor_Dummy) nema17_dummy();
+
+    translate([0, 0, Slide_Travel]) {
+        if (Show_Slider) color("Cyan") restored_slider();
+        if (Show_Rack) color("Gold") translate([-(gear_thick+0.6)/2, Floor_Height + 2.3, 0])
+                rotate([0, -90, 90]) translate([- (gear_thick+0.6)/2, -5.6, 0])
+                rack(mod=module_size, teeth=ceil(Length/(module_size*PI)), thickness=gear_thick + 0.6, h=8);
+    }
+    
+    if (Show_Pinion) {
+        translate([0, pinion_y_center + (slot_len_val/2), 0]) rotate([0, 90, 0])
+            spur_gear(mod=module_size, teeth=num_teeth_pinion, thickness=gear_thick, shaft_diam=8.128, center=true);
+    }
+}
